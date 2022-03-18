@@ -117,8 +117,41 @@ bgwriter在`postgresql.conf`下的配置参数如下：
 在代码实现中，bgwriter经由`StartBackgroundWriter`拉起，其执行入口为`BackgroundWriterMain`
 
 ## walwriter
+walwriter在`postgresql.conf`下的配置参数如下：
+```
+#------------------------------------------------------------------------------
+# WRITE-AHEAD LOG
+#------------------------------------------------------------------------------
 
+# - Settings -
 
+#wal_level = replica                    # minimal, replica, or logical
+                                        # (change requires restart)
+#fsync = on                             # 日志是否先入数据落盘
+#synchronous_commit = on                # 是否等待WAL写完后才更新事务状态
+#wal_sync_method = fsync                # the default is the first option
+                                        # supported by the operating system:
+                                        #   open_datasync
+                                        #   fdatasync (default on Linux and FreeBSD)
+                                        #   fsync
+                                        #   fsync_writethrough
+                                        #   open_sync
+#full_page_writes = on                  # 是否将整个page写入WAL
+#wal_log_hints = off                    # also do full page writes of non-critical updates
+                                        # (change requires restart)
+#wal_compression = off                  # enable compression of full-page writes
+#wal_init_zero = on                     # zero-fill new WAL files
+#wal_recycle = on                       # recycle WAL files
+#wal_buffers = -1                       # min 32kB, -1 sets based on shared_buffers
+                                        # (change requires restart)
+#wal_writer_delay = 200ms               # 1-10000 milliseconds
+#wal_writer_flush_after = 1MB           # measured in pages, 0 disables。当脏数据超过阈值时，会被刷出到磁盘
+#wal_skip_threshold = 2MB
+
+#commit_delay = 0                       # range 0-100000, in microseconds。一个已经提交的数据在WAL缓冲区中存放的时间；若设置为非0值，事务commit后不会立即写入WAL中，会等待WalWriter进程周期性地写入磁盘
+#commit_siblings = 5                    # range 1-1000
+```
+在代码实现中，walwriter执行入口为`WalWriterMain`
 
 ## autovacuum
 
