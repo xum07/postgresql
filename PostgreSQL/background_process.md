@@ -79,12 +79,13 @@ PG的后台进程在不同版本稍有差别，以目前最新的版本而言，
 ![image-20220312122149853](background_process.assets/image-20220312122149853.png)
 
 1. `checkpointer`：
-2. `background writer`：将共享内存中的脏页写入磁盘。其实手动`checkpoint`或者后台进程`checkpointer`定时任务也会将脏页写入磁盘。但是一般而言，`checkpoint`的间隔时间较长，而`bgwriter`的间隔时间很短（默认），所以`bgwriter`可以减少`checkpoint`的压力，避免大量数据同时落盘，让IO负载更平稳
+2. `background writer`：将内存中的脏页写入磁盘。其实手动`checkpoint`或者后台进程`checkpointer`定时任务也会将脏页写入磁盘。但是一般而言，`checkpoint`的间隔时间较长，而`bgwriter`的间隔时间很短（默认），所以`bgwriter`可以减少`checkpoint`的压力，避免大量数据同时落盘，让IO负载更平稳
 3. `walwriter`：其中，`wal`的全称是`write-ahead-log`（预写式日志），即日志先于数据落盘。
-4. `autovacuum`
-5. `stats collector`
+4. `autovacuum`：处于效率和多版本考虑，数据执行delete后，旧的数据并不会立即被删除，而只是添加一个删除标记。autovacuum主要清理这些被标记为删除的数据
+5. `stats collector`：主要进行数据的统计收集，收集到的信息用于查询优化
 6. `logical replication`
 6. `syslogger`：记录系统运行中的一些stderr日志，代码中通常调用`elog.h`中的`ereport`来记录日志。必须注意，sysloogger进程**非默认开启**
+6. ``：
 
 > 以下在`postgresql.conf`中的配置参数有很多含义表述不清，更详细的解释可以参考`src/backend/utils/misc/guc.c`中的信息。还有一些，在`guc.c`中描述的含义其实也与参数本意有所区别，这种只有通过代码才能知道了
 
