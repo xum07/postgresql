@@ -20,3 +20,7 @@ PostgreSQL的一些总结
 1. [data_distribution](./Distributed_PostgreSQL/data_distribution.md)：介绍多节点上的数据分布方式
 2. [redistribution](./Distributed_PostgreSQL/redistribution.md)：介绍多节点的数据重分布，即扩缩容
 2. [election_of_datanode](./Distributed_PostgreSQL/election_of_datanode.md)：数据节点的选主机制
+
+# Others
+主要归纳不同数据库的特点和比较，放在根路径下
+1. [compare_of_pg_and_mysql](./compare_of_pg_and_mysql.md)：比较PostgreSQL和Mysql
