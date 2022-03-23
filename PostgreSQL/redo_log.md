@@ -12,7 +12,7 @@
 
 在PG执行完`initdb`之后，会在`$PGDATA/pg_wal`目录下生成一份日志文件和一个用来保存归档日志的目录
 
-![2022-03-23-20-37-07-image.png](D:\Codes\git-resp\pg_summary\PostgreSQL\redo_log.assets\2022-03-23-20-37-07-image.png)
+![2022-03-23-20-37-07-image.png](./redo_log.assets/2022-03-23-20-37-07-image.png)
 
 在`initdb`执行期间，redo_log被初始化的流程为：
 
