@@ -101,5 +101,5 @@ typedef struct CheckPoint
 
 此处是为了解决问题3和问题4，即：`这个标记里面应该携带一定的信息，除了方便redo_log回放处理，还得方便真出问题的时候，能够有效的定位`和`既然是用于redo_log回放，就不应该只考虑单机的情况，备机build、备机追赶主机也是redo_log回放的一种场景`
 
-对于问题3，这里其实就是前面`CheckPoint`结构体中，除了`XLogRecPtr redo`之外的其它参数所需要解决的。而对于问题4，主备机除开某些特殊场景不太一样之外，它们本质上都会走同一套redo_log回放流程。此处不针对这些细枝末节的特殊场景展开，只是单纯看下checkpoint在回放中的作用，详细的redo_log回放请参考[redo_log](./redo_log.md)中的介绍
+对于问题3，这里其实就是前面`CheckPoint`结构体中，除了`XLogRecPtr redo`之外的其它参数所需要解决的。而对于问题4，主备机除开某些特殊场景不太一样之外，它们本质上都会走同一套redo_log回放流程。此处不针对这些细枝末节的特殊场景展开，只是单纯看下checkpoint在回放中的作用，详细的redo_log回放请参考[how_to_redo](./how_to_redo.md)中的介绍
 
