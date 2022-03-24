@@ -8,6 +8,8 @@
 
 达成上面的共识之后，接下来详细看下PosrgreSQL(以下简称PG)的redo log的细节
 
+> 本文中涉及到的`controlfile`只会在相应小节中介绍对应的操作，其具体功能会放在[how_to_redo](./how_to_redo.md)中说明
+
 # 初始化
 
 在PG执行完`initdb`之后，会在`$PGDATA/pg_wal`目录下生成一份日志文件和一个用来保存归档日志的目录
@@ -154,23 +156,103 @@ int	wal_segment_size = DEFAULT_XLOG_SEG_SIZE;
 | 表空间操作     | RM_SMGR, RM_DBASE, RM_TBLSPC, RM_RELMAP                    |
 | 副本或备机操作 | RM_STANDBY, RM_REPLORIGIN, RM_GENERIC_ID, RM_LOGICALMSG_ID |
 
-# 写入一条redo_log记录
-
-Full Page Write
-
 # 内存管理
 
-redo_log在PG拉起时会分配一定的内存空间，其流程为：
+作为数据库的核心功能，redo_log具有独立的缓冲区，会在PG拉起的时候进行初始化。
 
 ```c
-XLOGShmemInit
+SubPostmasterMain
+    └── CreateSharedMemoryAndSemaphores
+             └── XLOGShmemInit
+                     ├── XLogCtl = ShmemInitStruct("XLOG Ctl", XLOGShmemSize(), &foundXLog);
+                     └── ControlFile = ShmemInitStruct("Control File", sizeof(ControlFileData), &foundCFile);
 ```
 
+PG是一个多进程的系统，而xlog只有一份，所以这里申请的内存是一个共享内存
 
+## XLog内存
+
+首先，XLog的内存的大小可以通过`XLOGShmemSize`计算得出
+
+```
+size = sizeof(XLogCtlData) +
+       sizeof(WALInsertLockPadded)*(NUM_XLOGINSERT_LOCKS + 1) +
+       sizeof(XLogRecPtr) * XLOGbuffers +
+       XLOG_BLCKSZ +
+       XLOG_BLCKSZ * XLOGbuffers
+```
+
+- `XLOG_BLCKSZ`是在configure通过`--with-wal-blocksize`参数设置，默认8K
+
+  ![image-20220324231930901](redo_log.assets/image-20220324231930901.png)
+
+- `XLOGbuffers`是通过`postgresql.conf`中通过`wal_buffers`参数设置的，默认为-1。若为-1，则通过`XLOGChooseNumBuffers`计算得出
+
+  ```c
+  static int XLOGChooseNumBuffers(void)
+  {
+  	int xbuffers = NBuffers / 32;
+  	if (xbuffers > (wal_segment_size / XLOG_BLCKSZ))
+  		xbuffers = (wal_segment_size / XLOG_BLCKSZ);
+  	if (xbuffers < 8)
+  		xbuffers = 8;
+  	return xbuffers;
+  }
+  ```
+
+  > `NBuffers`对应于`postgresql.conf`中`shared_buffers`参数，`wal_segment_size`在前述[初始化](#初始化)中已经说明。这几个值都可以通过sql查询。按照如下设置，可以计算得到大小为4M，即512个page
+  >
+  > ```
+  > postgres=# show shared_buffers;
+  >  shared_buffers
+  > ----------------
+  >  128MB
+  > (1 row)
+  > 
+  > postgres=# show wal_segment_size;
+  >  wal_segment_size
+  > ------------------
+  >  16MB
+  > (1 row)
+  > 
+  > postgres=# show wal_block_size;
+  >  wal_block_size
+  > ----------------
+  >  8192
+  > (1 row)
+  > ```
+
+总体来说，执行完`XLOGShmemInit`后的redo_log内存结构有5个部分，分布结构如下图：
+
+![image-20220324234706106](redo_log.assets/image-20220324234706106.png)
+
+1. XLogCtl
+2. LSN数组，数组的元素个数与Log Buffer的页面数相等
+3. WALInsertLockPadded数组，数组元素个数为`NUM_XLOGINSERT_LOCKS + 1`，即9个
+4. 对齐位，大小为XLOG_BLCKSZ
+5. Log Buffer，数组元素个数为XLOGbuffers
+
+### XLogCtl
+
+
+
+### LSN
+
+
+
+### Lock
+
+
+
+## ControlFile内存
 
 # 落盘
 
 
+
+# 写入一条redo_log记录
+
+Full Page Write
 
 # 参考资料
 

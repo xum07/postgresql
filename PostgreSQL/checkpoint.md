@@ -44,12 +44,14 @@ CreateCheckPoint
      └── XLogFlush // 写有checkpoint记录的redo_log最后落盘
 ```
 
+## 标记中的信息
+
 然后我们来看一下redo_log中的一个checkpoint标记长什么样。其结构如下。无需关注除了第一个参数`XLogRecPtr redo`之外的其它参数：
 
 > redo_log中的记录需要遵循它自己的一套规则，具体可以参考[redo_log](./redo_log.md)中的详细介绍，此处不做展开
 
 1. 对于一个checkpoint标记而言，它自身只需要`XLogRecPtr redo`这一条信息就够了(就是这条信息，也是防并发考虑的，可参见源码`xlog.c`中`CreateCheckPoint`在初始化`XLogRecPtr redo`参数时的注释)，达成这样它已经完成了一个标记的本质功能，即能够让redo_log正确的识别它
-2. 其它参数都是出于checkpoint参与redo_log回放、以及怎么让数据库系统快速的恢复到异常前的状态而加入的。这部分参数可能随着PG版本的迭代和特性的更替有所变化。这部分也将放在[怎么参与回放](#怎么参与回放)中详细展开
+2. 其它参数都是出于checkpoint参与redo_log回放、以及怎么让数据库系统快速的恢复到异常前的状态而加入的。这部分参数可能随着PG版本的迭代和特性的更替有所变化
 
 ```c
 typedef struct CheckPoint
@@ -83,6 +85,37 @@ typedef struct CheckPoint
 } CheckPoint;
 ```
 
+在PG中可以通过命令查看checkpoint的信息，其本质是调用了`pg_control_checkpoint`函数
+
+```
+postgres=# explain select * from pg_control_checkpoint();
+-[ RECORD 1 ]--------------------------------------------------------------------------
+QUERY PLAN | Function Scan on pg_control_checkpoint  (cost=0.00..0.01 rows=1 width=137)
+
+postgres=# select * from pg_control_checkpoint();
+-[ RECORD 1 ]--------+-------------------------
+checkpoint_lsn       | 0/167E820
+redo_lsn             | 0/167E7E8
+redo_wal_file        | 000000010000000000000001
+timeline_id          | 1
+prev_timeline_id     | 1
+full_page_writes     | t
+next_xid             | 0:733
+next_oid             | 13011
+next_multixact_id    | 1
+next_multi_offset    | 0
+oldest_xid           | 726
+oldest_xid_dbid      | 1
+oldest_active_xid    | 733
+oldest_multi_xid     | 1
+oldest_multi_dbid    | 1
+oldest_commit_ts_xid | 0
+newest_commit_ts_xid | 0
+checkpoint_time      | 2022-03-24 20:26:41+08
+```
+
+
+
 ## 需要一个常驻进程
 
 此处是为了解决问题2，即：`这个标记应该尽量选择一个合适的时间间隔，以及一个合适的数据量间隔。因为数据库有时候会面临长时间没什么业务，有时候又会短时间内业务量爆发`
@@ -97,3 +130,29 @@ typedef struct CheckPoint
 
 对于问题3，这里其实就是前面`CheckPoint`结构体中，除了`XLogRecPtr redo`之外的其它参数所需要解决的。而对于问题4，主备机除开某些特殊场景不太一样之外，它们本质上都会走同一套redo_log回放流程。此处不针对这些细枝末节的特殊场景展开，只是单纯看下checkpoint在回放中的作用，详细的redo_log回放请参考[how_to_redo](./how_to_redo.md)中的介绍
 
+> 以下代码基于PG 14.2版本。但核心逻辑其实是一样的，如果某些命令发生了变化，那就将它当做伪代码来看吧
+
+```c
+StartupXLOG
+    ├── ReadCheckpointRecord
+    │
+    ├── ReadRecord  // 读取记录，执行回放。内部是个for(;;)，直到读完为止
+    │ 
+    ├── /* 根据checkpoint记录初始化系统（以下未列举全，仅供理解） */
+    │   ShmemVariableCache->nextXid = checkPoint.nextXid;
+    │   ShmemVariableCache->nextOid = checkPoint.nextOid;
+    │   MultiXactSetNextMXact(checkPoint.nextMulti, checkPoint.nextMultiOffset);
+    │   AdvanceOldestClogXid(checkPoint.oldestXid);
+    │   SetTransactionIdLimit(checkPoint.oldestXid, checkPoint.oldestXidDB);
+    │   SetMultiXactIdLimit(checkPoint.oldestMulti, checkPoint.oldestMultiDB, true);
+    │   SetCommitTsLimit(checkPoint.oldestCommitTsXid, checkPoint.newestCommitTsXid);
+    │
+    └── /* 回放完毕，打上一个标记。毕竟如果系统这时候又崩了，你不会想再重来一次吧？ */
+        CreateCheckPoint(CHECKPOINT_END_OF_RECOVERY | CHECKPOINT_IMMEDIATE);
+```
+
+# 结语
+
+至此，关于checkpoint的一些简单信息已经全部介绍完毕。本文最重要的并不是与checkpoint有关的知识，而是分析问题的方式，或者也可以说是思考的方式，即如何从第一性出发来考虑问题
+
+PG的版本演化至今，出于优化、可靠性、扩展性等等考虑，代码早已不像最初那样容易让人看懂了，庞大的函数和巨大的圈复杂度，如果陷入其中无助于对核心问题的理解。当然，此处也提供另一种思路，可以找到最初的那些PG版本，甚至可以直接通过git记录来阅读
