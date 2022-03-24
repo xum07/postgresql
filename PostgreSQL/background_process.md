@@ -72,6 +72,13 @@ command1 | command2 | command3
 
 ![image-20220312105107832](background_process.assets/image-20220312105107832.png)
 
+# 为何PG采用进程
+介绍了Linux进程和线程后，在介绍PG的后台进程任务之前，先插入一点题外话：为何PG的后台任务要进程而不是线程
+
+这个答案比较简单：历史因素。早期的操作系统对线程支持的并不够好，而后期没有切换成线程的迫切需要和动力，所以PG使用进程作为后台任务的模式就这样一直延续了下来。PG实现进程的原因在*The design of Postgres*一书中有提及。顺带一提，Mysql作为后来才出现的产品，它采用的是多线程管理的模式，至于PG和Mysql的优劣对比可见参见[compare_of_pg_and_mysql](../compare_of_pg_and_mysql.md)
+
+> However, this approach requires that a fairly complete special-purpose operating system be built. In contrast, the process-per-user model is simpler to implement but will not perform as well on most conventional operating systems. We decided after much soul searching to implement POSTGRES using a process-per-user model architecture because of our limited programming resources.
+
 # PG后台进程
 
 PG的后台进程在不同版本稍有差别，以目前最新的版本而言，其后台进程如下：
