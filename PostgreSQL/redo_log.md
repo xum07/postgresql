@@ -226,33 +226,80 @@ size = sizeof(XLogCtlData) +
 
 ![image-20220324234706106](redo_log.assets/image-20220324234706106.png)
 
-1. XLogCtl
+1. XLogCtl：即`XLogCtlData`，是redo_log的控制结构体，内部参数众多，此处不详细展开，具体直接参见源码
+
 2. LSN数组，数组的元素个数与Log Buffer的页面数相等
-3. WALInsertLockPadded数组，数组元素个数为`NUM_XLOGINSERT_LOCKS + 1`，即9个
+
+3. WALInsertLockPadded数组，数组元素个数为`NUM_XLOGINSERT_LOCKS + 1`，即9个。在PG中，redo_log的缓冲区使用一种LWLock的锁（轻量级锁），其结构如下。值得注意的是：**redo_log一共只有8个锁**，即使它有很多个page。一旦锁全部被占用，那就只能等待有人释放
+
+   > 关于轻量级锁的具体细节，请参见[locks_in_pg](.locks_in_pg.md)
+
+   ```c
+   typedef struct
+   {
+   	LWLock		lock;
+   	XLogRecPtr	insertingAt;
+   	XLogRecPtr	lastImportantAt;
+   } WALInsertLock;
+   
+   typedef union WALInsertLockPadded
+   {
+   	WALInsertLock l;
+   	char		pad[PG_CACHE_LINE_SIZE];
+   } WALInsertLockPadded;
+   ```
+
+   
+
 4. 对齐位，大小为XLOG_BLCKSZ
-5. Log Buffer，数组元素个数为XLOGbuffers
 
-### XLogCtl
-
-
-
-### LSN
-
-
-
-### Lock
+5. Log Buffer，数组元素个数为XLOGbuffers。这部分才是redo_log数据的存放位置，每一个大小都是`XLOG_BLCKSZ`，与PG系统中所有其它的page大小一致。默认均为8K
 
 
 
 ## ControlFile内存
 
+
+
 # 落盘
 
+redo_log写入磁盘的核心函数为`XLogWrite`，它可能由后台进程`WalWriter`触发，也可能由事务提交直接触发等等
+
+# 新增一条redo_log记录
+
+PG系统正常运行时，插入一条redo_log记录的核心流程为：
+
+```c
+XLogInsert
+    ├── GetFullPageWriteInfo
+    ├── XLogRecordAssemble
+    └── XLogInsertRecord
+```
+
+> `XLogRecordAssemble`即组装一条XLog Record Data，组装的数据内容可参考[文件结构](#文件结构)，此处不详述
+
+## Full Page Write
 
 
-# 写入一条redo_log记录
 
-Full Page Write
+## Insert
+
+在插入redo_log记录时，抛开可能需要更换到下一个segment等情况，其主要流程为：
+
+```c
+XLogInsertRecord
+   ├── WALInsertLockAcquire
+   │ 
+   ├── /* 先预留空间，再执行插入。尽可能减少并发问题 */
+   │   ReserveXLogInsertLocation
+   │   CopyXLogRecordToWAL // 需要先拿到缓冲区的buff，如果缓冲区内没有空闲的，则要把旧的buff写出
+   │ 
+   ├── WALInsertLockRelease
+   │
+   ├── LWLockAcquireOrWait(WALWriteLock, LW_EXCLUSIVE)
+   ├── XLogWrite // fsync开启即会出发
+   └── LWLockRelease(WALWriteLock)
+```
 
 # 参考资料
 
