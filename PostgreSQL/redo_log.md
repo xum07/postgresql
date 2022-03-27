@@ -203,23 +203,7 @@ size = sizeof(XLogCtlData) +
   > `NBuffers`对应于`postgresql.conf`中`shared_buffers`参数，`wal_segment_size`在前述[初始化](#初始化)中已经说明。这几个值都可以通过sql查询。按照如下设置，可以计算得到大小为4M，即512个page
   >
   > ```
-  > postgres=# show shared_buffers;
-  >  shared_buffers
-  > ----------------
-  >  128MB
-  > (1 row)
-  > 
-  > postgres=# show wal_segment_size;
-  >  wal_segment_size
-  > ------------------
-  >  16MB
-  > (1 row)
-  > 
-  > postgres=# show wal_block_size;
-  >  wal_block_size
-  > ----------------
-  >  8192
-  > (1 row)
+  > postgres=# show shared_buffers;shared_buffers----------------128MB(1 row)postgres=# show wal_segment_size;wal_segment_size------------------16MB(1 row)postgres=# show wal_block_size;wal_block_size----------------8192(1 row)
   > ```
 
 总体来说，执行完`XLOGShmemInit`后的redo_log内存结构有5个部分，分布结构如下图：
@@ -235,18 +219,7 @@ size = sizeof(XLogCtlData) +
    > 关于轻量级锁的具体细节，请参见[locks_in_pg](.locks_in_pg.md)
 
    ```c
-   typedef struct
-   {
-   	LWLock		lock;
-   	XLogRecPtr	insertingAt;
-   	XLogRecPtr	lastImportantAt;
-   } WALInsertLock;
-   
-   typedef union WALInsertLockPadded
-   {
-   	WALInsertLock l;
-   	char		pad[PG_CACHE_LINE_SIZE];
-   } WALInsertLockPadded;
+   typedef struct{	LWLock		lock;	XLogRecPtr	insertingAt;	XLogRecPtr	lastImportantAt;} WALInsertLock;typedef union WALInsertLockPadded{	WALInsertLock l;	char		pad[PG_CACHE_LINE_SIZE];} WALInsertLockPadded;
    ```
 
    
@@ -257,15 +230,19 @@ size = sizeof(XLogCtlData) +
 
 
 ### LSN
+
 #### LSN的设计原理
+
 LSN，全称Log Sequence Number, 是每一条redo_log(即一个`XLogRecord`)的序号。它所解决的问题是，
+
 1. 在redo_log执行回放时，确保记录下来的这些操作执行完毕后，会与用户当初下发的命令执行完毕后，系统内数据会达成一模一样的状态。（最句话写的比较绕口，即实现系统状态的最终一致性）
-   
+
    > 在一个数据库系统中，怎么让事务在多并发的情况下保证ACID，就是所需要解决的最大难题。LSN是其中的机制之一
 
 2. 便于快速寻址redo_log中某条记录的具体位置
 
 LSN是一个`uint64`的数字，它的设计与前述[初始化](#初始化)中的`XLogFilePath`有直接对应关系。因为redo_log的文件名由3个8位16进制组成，其取值范围分别是：
+
 - timeline: 0x00000000 -> 0xFFFFFFFF
 - 0x00000000 -> 0xFFFFFFFF
 - 0x00000000 -> 0x000000FF
@@ -273,15 +250,19 @@ LSN是一个`uint64`的数字，它的设计与前述[初始化](#初始化)中�
 所以抛开`timeline`不看，第二部分总共占位32bit，第三部分占位8bit，最后因为reod_log一个segment文件大小是16M，所以需要$2^24$才能表示完每一个字节(Byte)，即占位24bit。因此，LSN是一个`uint64`即64bit的数字
 
 #### LSN的计算
+
 它与redo_log文件的对应关系可以参考`pg_walfile_name`函数，在不改变默认参数的情况下，最终得到的计算式如下：
+
 ```c
 sprintf(xlogfilename, "%08X%08X%08X", timeline, (uint32_t)((lsn-1) / (16M * 256)), (uint32_t)(((lsn-1) / 16M) % 256) )
 ```
+
 > 1. 参数中的`timeline`可以根据`pg_control`文件解析得到，也可以根据redo_log的前8位判断即可
 > 2. 关于偏移的计算此处跳过，核心函数为:`pg_walfile_name_offset`
 
 
 在PG系统中，可以执行如下命令查看redo_log当前的LSN(对应函数`pg_current_wal_lsn`)
+
 ```sql
 postgres=# postgres=# select pg_current_wal_lsn(),pg_walfile_name(pg_current_wal_lsn()),pg_walfile_name_offset(pg_current_wal_lsn());
  pg_current_wal_lsn |     pg_walfile_name      |       pg_walfile_name_offset       
@@ -290,8 +271,10 @@ postgres=# postgres=# select pg_current_wal_lsn(),pg_walfile_name(pg_current_wal
 (1 row)
 ```
 
-> 值得注意的是：显示出来的这个字符串`0/17C6388`，虽然也叫LSN。但本质不是PG代码中使用到的LSN，只是为了方便查看，对`uint64`类型的LSN做了一层转换。
+> 值得注意的是：显示出来的这个字符串`0/17C6388`，虽然也叫LSN。但本质不是PG代码中使用到的LSN，只是为了方便查看，对`uint64`类型的LSN做了一层转换
+>
 > 其转换的核心函数为`pg_lsn_in`、`pg_lsn_out`。规则为：`/`符号后的数字是LSN的低32位，`/`符号前的数字是LSN的高32位。然后将其分别转换为16进制之后，拼接为字符串。计算方式等价于：`sprintf(buf, "%X/%X", (uint32)(lsn >> 32), (uint32)lsn)`
+>
 > 所以`0/17C6388`转换回LSN就等于`00000000 00000000 00000000 00000000 000000001 01111100 01100011 10001000`(8位一个分隔)
 
 ## ControlFile内存
