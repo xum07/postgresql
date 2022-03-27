@@ -256,6 +256,29 @@ size = sizeof(XLogCtlData) +
 5. Log Buffer，数组元素个数为XLOGbuffers。这部分才是redo_log数据的存放位置，每一个大小都是`XLOG_BLCKSZ`，与PG系统中所有其它的page大小一致。默认均为8K
 
 
+### LSN
+LSN，全称Log Sequence Number, 是每一条redo_log(即一个`XLogRecord`)的序号。它所解决的问题是，在redo_log执行回放时，确保记录下来的这些操作执行完毕后，会与用户当初下发的命令执行完毕后，系统内数据会达成一模一样的状态。（最句话写的比较绕口，即实现系统状态的最终一致性）
+
+> 在一个数据库系统中，怎么让事务在多并发的情况下保证ACID，就是所需要解决的最大难题。LSN是其中的机制之一
+
+LSN是一个`uint64`的数字，由3部分组成：`<逻辑文件id, 物理文件id, 文件内偏移>`
+
+在PG系统中，可以执行如下命令查看redo_log当前的LSN(对应函数`pg_current_wal_lsn`)
+```sql
+postgres=# select pg_current_wal_lsn();
+ pg_current_wal_lsn 
+--------------------
+ 0/17C6388
+(1 row)
+```
+
+> 值得注意的是：显示出来的这个字符串``，虽然也叫LSN。但本质不是PG代码中使用到的LSN，只是为了方便查看，对`uint64`类型的LSN做了一层转换。
+> 其转换的核心函数为`pg_lsn_in`、`pg_lsn_out`。规则为：`/`符号后的数字是LSN的低32位，`/`符号前的数字是LSN的高32位
+
+
+
+
+
 
 ## ControlFile内存
 
