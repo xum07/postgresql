@@ -257,18 +257,36 @@ size = sizeof(XLogCtlData) +
 
 
 ### LSN
-LSN，全称Log Sequence Number, 是每一条redo_log(即一个`XLogRecord`)的序号。它所解决的问题是，在redo_log执行回放时，确保记录下来的这些操作执行完毕后，会与用户当初下发的命令执行完毕后，系统内数据会达成一模一样的状态。（最句话写的比较绕口，即实现系统状态的最终一致性）
+#### LSN的设计原理
+LSN，全称Log Sequence Number, 是每一条redo_log(即一个`XLogRecord`)的序号。它所解决的问题是，
+1. 在redo_log执行回放时，确保记录下来的这些操作执行完毕后，会与用户当初下发的命令执行完毕后，系统内数据会达成一模一样的状态。（最句话写的比较绕口，即实现系统状态的最终一致性）
+   
+   > 在一个数据库系统中，怎么让事务在多并发的情况下保证ACID，就是所需要解决的最大难题。LSN是其中的机制之一
 
-> 在一个数据库系统中，怎么让事务在多并发的情况下保证ACID，就是所需要解决的最大难题。LSN是其中的机制之一
+2. 便于快速寻址redo_log中某条记录的具体位置
 
-LSN是一个`uint64`的数字，由3部分组成：`<逻辑文件id, 物理文件id, 文件内偏移>`
+LSN是一个`uint64`的数字，它的设计与前述[初始化](#初始化)中的`XLogFilePath`有直接对应关系。因为redo_log的文件名由3个8位16进制组成，其取值范围分别是：
+- timeline: 0x00000000 -> 0xFFFFFFFF
+- 0x00000000 -> 0xFFFFFFFF
+- 0x00000000 -> 0x000000FF
+
+所以抛开`timeline`不看，第二部分总共占位32bit，第三部分占位8bit，最后因为reod_log一个segment文件大小是16M，所以需要$2^24$才能表示完每一个字节(Byte)，即占位24bit。因此，LSN是一个`uint64`即64bit的数字
+
+#### LSN的计算
+它与redo_log文件的对应关系可以参考`pg_walfile_name`函数，在不改变默认参数的情况下，最终得到的计算式如下：
+```c
+sprintf(xlogfilename, "%08X%08X%08X", timeline, (uint32_t)((lsn-1) / (16M * 256)), (uint32_t)(((lsn-1) / 16M) % 256) )
+```
+> 1. 参数中的`timeline`可以根据`pg_control`文件解析得到，也可以根据redo_log的前8位判断即可
+> 2. 关于偏移的计算此处跳过，核心函数为:`pg_walfile_name_offset`
+
 
 在PG系统中，可以执行如下命令查看redo_log当前的LSN(对应函数`pg_current_wal_lsn`)
 ```sql
-postgres=# select pg_current_wal_lsn();
- pg_current_wal_lsn 
---------------------
- 0/17C6388
+postgres=# postgres=# select pg_current_wal_lsn(),pg_walfile_name(pg_current_wal_lsn()),pg_walfile_name_offset(pg_current_wal_lsn());
+ pg_current_wal_lsn |     pg_walfile_name      |       pg_walfile_name_offset       
+--------------------+--------------------------+------------------------------------
+ 0/17C6388          | 000000010000000000000001 | (000000010000000000000001,8151944)
 (1 row)
 ```
 
