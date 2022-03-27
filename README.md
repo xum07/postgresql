@@ -29,6 +29,10 @@ PostgreSQL的一些总结
 2. - [ ] [redistribution](./Distributed_PostgreSQL/redistribution.md)：介绍多节点的数据重分布，即扩缩容
 3. - [ ] [election_of_datanode](./Distributed_PostgreSQL/election_of_datanode.md)：数据节点的选主机制
 
+# OpenGauss
+
+1. - [ ] [parellel_redo](./OpenGauss/parellel_redo.md)：介绍并行回放的机制
+
 # Others
 
 主要归纳不同数据库的特点和比较，放在根路径下
