@@ -1,8 +1,6 @@
 
 
-MVCC，全称Multi Version Concurrency Control，即并发版本控制。它本质是为了**解决事务的ACID(Atomicity Consistency Isolation Durability)中C部分**。除此之外，MVCC还想解决的是**读写并发冲突，提高读的效率**
-
-> Isolation由快照解决，而不是MVCC
+MVCC，全称Multi Version Concurrency Control，即并发版本控制。它本质是为了**解决事务的ACID(Atomicity Consistency Isolation Durability)中 C、I 两部分**。除此之外，MVCC还想解决的是**读写并发冲突，提高读的效率**
 
 MVCC有自己的一套理论和算法，这里不做详细展开，如有兴趣可以自行阅读：
 
@@ -19,11 +17,19 @@ MVCC有自己的一套理论和算法，这里不做详细展开，如有兴趣�
 
 # MV
 
-Multi Version是通过tuple的结构设计来完成的。PG有两种页面，数据(Heap)和索引(Index)，它们都使用着`PageHeaderData`作为自己的页面头，并具备类似的页面结构，其基本结构图如下。不过，MVCC只涉及Heap，不涉及Index
+Multi Version是通过一些特殊设计的数据结构来实现的，设计到以下三个方面。他们共同解决多版本的可见性、可用性
 
-![Fig. 5.3. Representation of tuples.](http://www.interdb.jp/pg/img/fig-5-03.png)
+- tuple的结构
+- 快照
+- clog，或者在PG 10以上的版本中也被称为xact_log
 
-## 数据结构
+## tuple
+
+tuple的结构设计来完成的。PG有两种页面，数据(Heap)和索引(Index)，它们都使用着`PageHeaderData`作为自己的页面头，并具备类似的页面结构，其基本结构图如下。不过，MVCC只涉及Heap，不涉及Index
+
+![image-20220407224202840](MVCC.assets/image-20220407224202840.png)
+
+### 数据结构
 
 Heap tuple的基本数据结构为`HeapTupleFields`、`HeapTupleHeaderData`等，具体参数可以参见源码。此处，我们专注于MV问题，暂时不深入介绍上述结构体的一些细枝末节，例如`TransactionId t_xvac;	/* old-style VACUUM FULL xact ID */`等部分的作用
 
@@ -56,9 +62,7 @@ struct HeapTupleHeaderData
 };
 ```
 
-
-
-## 实现
+### 实现
 
 因为在PG中，Update本质就是先Delete，再Insert，所以为了更方便的说明MV的实现，这里将Delete与Update归在一起讲解
 
@@ -80,7 +84,7 @@ Indexes:
 Access method: heap
 ```
 
-## Insert
+#### Insert
 
 命令如下：
 
@@ -132,7 +136,7 @@ test=# SELECT lp as tuple, t_xmin, t_xmax, t_field3 as t_cid, t_ctid FROM heap_p
    - 以第一个tuple为例，这个tuple是新增的，也没有任何的修改、删除等，所以`t_ctid`的第二个数字为1，指向`tuple = 1`的位置，即它自身
    - 其它以此类推
 
-## Update/Delete
+#### Update/Delete
 
 命令如下：
 
@@ -195,7 +199,23 @@ test=# SELECT lp as tuple, t_xmin, t_xmax, t_field3 as t_cid, t_ctid FROM heap_p
 
 如果上述不够形象，可以参考[The Internals of PostgreSQL: Concurrency Control](http://www.interdb.jp/pg/pgsql05.html#_5.2.)中的示意图：
 
-![Fig. 5.6. Update the row twice.](http://www.interdb.jp/pg/img/fig-5-06.png)
+![image-20220407224225654](MVCC.assets/image-20220407224225654.png)
+
+## 快照
+
+### 数据结构
+
+
+
+### 实现
+
+
+
+## Clog/xact_log
+
+clog的详细介绍可以参考[clog/xact_log](./xact_log.md)，这里只讨论与MVCC实际相关的部分
+
+
 
 # CC
 

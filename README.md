@@ -15,13 +15,15 @@ PostgreSQL的一些总结
 3. - [ ] [swap_algo_of_memory](./Database/PostgreSQL/swap_algo_of_memory.md)：介绍PG中不同内存的换入换出算法
 4. - [ ] [logs_in_pg](./Database/PostgreSQL/logs_in_pg.md)：介绍PG中的各种日志
    - - [ ] [redo_log](./Database/PostgreSQL/redo_log.md)
-   - - [ ] [clog](./Database/PostgreSQL/clog.md)
+   - - [ ] [clog/xact_log](./Database/PostgreSQL/xact_log.md)
 5. - [ ] [locks_in_pg](./Database/PostgreSQL/locks_in_pg.md)：介绍操作系统中典型的几种锁结构，以及PG中使用到的锁
 6. - [ ] [MVCC](./Database/PostgreSQL/MVCC.md)：介绍PG的MVCC实现
 7. - [ ] [vacuum](./Database/PostgreSQL/vacuum,md)：PG中的回收机制
 8. - [x] [checkpoint](./Database/PostgreSQL/checkpoint.md)：简单介绍PG中的检查点
    - - [ ] [deep_in_checkpoint](./Database/PostgreSQL/deep_in_checkpoint.md) : 更进一步的深入介绍checkpoint
-10. - [ ] [how_to_redo](./Database/PostgreSQL/how_to_redo.md)：PG如何回放日志
+9. - [ ] [how_to_redo](./Database/PostgreSQL/how_to_redo.md)：PG如何回放日志
+10. - [ ] [subtrans](./Database/PostgreSQL/subtrans.md): 子事务
+11. - [ ] [pageinspect](./Database/PostgreSQL/pageinspect.md): PG中的pageinspect插件，用来查看表结构
 
 ## Distributed PostgreSQL
 
