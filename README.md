@@ -24,6 +24,7 @@ PostgreSQL的一些总结
 9. - [ ] [how_to_redo](./Database/PostgreSQL/how_to_redo.md)：PG如何回放日志
 10. - [ ] [subtrans](./Database/PostgreSQL/subtrans.md): 子事务
 11. - [ ] [pageinspect](./Database/PostgreSQL/pageinspect.md): PG中的pageinspect插件，用来查看表结构
+12. - [ ] [state_machine](./Database/PostgreSQL/state_machine.md): PG中的状态机
 
 ## Distributed PostgreSQL
 
