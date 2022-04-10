@@ -125,7 +125,7 @@ CommitTransaction
    - 3.2 Participator收到消息，执行事务，并发送响应结果
    - 3.3 Coordinator收到所有Participator的回复，如果是“abort”消息，则Coordinator记录结果，整个过程到此结束；如果是“doCommit”消息，根据Participator的反馈，如果所有Participator都成功，则记录成功，如果有任何一个失败，则记录失败
 
->  一旦进入阶段三，可能会出现2种故障：Coordinator出现问题或者Coordinator和Participator之间的网络故障。无论哪种情况，都会导致Participator无法收到 doCommit 请求或者 abort 请求，针对这种情况，Participator都会在等待超时之后，继续进行事务提交
+>  一旦进入阶段三，可能会出现2种故障：Coordinator出现问题或者Coordinator和Participator之间的网络故障。无论哪种情况，都会导致Participator无法收到 doCommit 请求或者 abort 请求，针对这种情况，**Participator都会在等待超时之后，继续事务提交**
 
 ## 相对2PC的优缺点
 
@@ -136,6 +136,59 @@ CommitTransaction
 3. DoCommit阶段: 即便coordinator或watchdog未收到宕机participant的commit ACK，也结束该次事务；宕机的participant恢复后发现收到commit或者precommit，也将自行commit该次事务
 
 
-因此3PC的优点是：非阻塞的，即使单点故障后，也能够往下执行，避免了资源的长时间阻塞
+因此3PC的优点是：非阻塞的，即使单点故障后，也能够往下执行，**避免了资源的长时间阻塞**
 
-与之相伴的缺点也很明显：如果Participator收到了 preCommit 消息后，出现了网络分区，那么Participator等待超时后，都会进行事务的提交，这必然会出现事务不一致的问题
+与之相伴的缺点也很明显：如果Participator收到了 preCommit 消息后，出现了**网络分区，那么Participator等待超时后，都会进行事务的提交，这必然会出现事务不一致的问题**
+
+# raft
+
+Paxos因为其复杂性难以实现，业界多采用raft作为实际应用，已有raft实现数据库有rsqlite、taurus等，其它比较著名的产品有etcd
+
+> 传送数据库面临的场景正好是Paxos算法可以覆盖的情况
+
+## 算法概述
+
+不过raft算法不是一个强一致性算法，其分布式数据一致性为最终一致性，在事务执行过程中，需要满足的是多数派原则：即如果大多数节点执行成功了，则认为事务执行成功。
+
+### Leader选举
+
+下图是经典的raft协议中一个节点在Follower、Candidate、Leader三种状态之间的变化
+![](protocol_of_transaction_consistency.assets/raft_leader.png)
+
+概括来说有两点：
+
+1. 集群中同一时刻只有一个Leader，Leader会不停给Follower发送心跳以表明自身的存活状态。如果Leader故障，那么Follower自动转换为Candidate，直到集群重新选出Leader
+2. 所有节点启动时都是Follower状态，在一段时间内如果没有收到来自Leader的心跳，从Follower切换到Candidate，发起选举；如果收到majority的造成票（含自己的一票）则切换到Leader状态；如果发现其他节点比自己更新，则主动切换到Follower
+
+### 对外工作
+
+集群在Leader正常时可以对外工作，在接收到客户端请求时，Leader把请求作为日志条目（Log entries）加入到它的日志中(每条日志有个编号，称为log index)，然后并行的向其他服务器发起 AppendEntries RPC复制日志条目。当这条日志被复制到大多数服务器上，Leader将这条日志应用到它的状态机并向客户端返回执行结果。其中，每个日志条目由两部分组成：一部分是产生该Leader时的任期编号(term)，一部分是所需执行的命令
+
+![](protocol_of_transaction_consistency.assets/raft_commit.png)
+
+某些Followers可能没有成功的复制日志，Leader会无限的重试 AppendEntries RPC直到所有的Followers最终存储了所有的日志条目
+
+### 数据一致性保证
+
+以上是所有节点正常的情况，如果出现日志异常，如下图：
+![](protocol_of_transaction_consistency.assets/raft_log.png)
+
+对应三种情况：
+
+1. 比leader日志少，如上图中的ab
+2. 比leader日志多，如上图中的cd
+3. 某些位置比leader多，某些日志比leader少，如ef（多少是针对某一任期而言）
+
+raft的解决办法是，如果出现了leader与follower不一致的情况，leader强制follower复制自己的log。通过这些措施raft算法保证了集群的数据一致性：
+
+1. 一个节点得到majority的投票才能成为leader，而节点A给节点B投票的其中一个前提是，B的日志不能比A的日志旧
+2. 一个日志被复制到majority节点才算committed
+
+# Paxos
+
+Paxos一般分为Basic Paxos和Multi Paxos算法，Basic Paxos算法过程复杂，不适合运用在实际场景中。有运用的是Multi Paxos，但是Multi Paxos除了在Leader选举阶段和raft有所区别，在对外工作上与raft差别不是很大，同样是多数派机制。所以不再继续分析
+
+# 参考资料
+
+1. [Raft协议详解-Log Replication](https://zhuanlan.zhihu.com/p/29730357)
+2. [分布式系统理论基础 - 一致性、2PC和3PC](https://zhuanlan.zhihu.com/p/21994882)
