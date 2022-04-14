@@ -192,3 +192,5 @@ Paxos一般分为Basic Paxos和Multi Paxos算法，Basic Paxos算法过程复杂
 
 1. [Raft协议详解-Log Replication](https://zhuanlan.zhihu.com/p/29730357)
 2. [分布式系统理论基础 - 一致性、2PC和3PC](https://zhuanlan.zhihu.com/p/21994882)
+3. [聊聊分布式数据库对2PC的优化](https://www.51cto.com/article/640577.html)
+4. [Google Percolator](https://www.iggiewang.cn/2021/02/09/Google-Percolator/)
