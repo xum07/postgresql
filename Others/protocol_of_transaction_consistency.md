@@ -84,16 +84,20 @@ CommitTransaction
 >
 > > 而如果把GTM提交放在后面，会出现CN或DN中事务已提交，而拿到的snapshot中这条事务被认为尚处于活跃中，从而出现可见性不一致的情况。其实这种情况同样可以通过与上述类似的方法解决，但是代价会更大一些。因为在CN、DN上判断某个事务是否活跃可以直接查系统表，在内存中就能完成，而判断某个事务是否已经提交则涉及到查日志，可能需要读磁盘。
 
-## 2PC的特点
-
-2PC可以处理的场景其实有两种：
-
-1. 同一提交事务在多个不同的数据库节点上统一提交
-2. 不同的提交事务在多个不同的数据库节点上统一提交
-
-第一种场景下2PC是Paxos算法的一种实现，但是要求的更为严苛，所以执行效率较低第二种场景只有2PC协议可以保证，Paxos算法无法保证
-
 ## 2PC的问题
+
+最原始的2PC在面临下图类似场景时，**会出现数据不一致问题，最后的结果就是一个提交了，一个没有提交**
+
+![](protocol_of_transaction_consistency.assets/2PC_reject.jpg)
+
+当然，在实际2PC的代码实现里，一般不会采用这么原始的协议结构。通常会加入检测或者防呆：
+
+- 检测：即CN会检测DN的commit结果，如果有人失败，会回滚事务
+- 防呆：如果CN与DN之间的网络通信发生了问题，DN会超时取消事务提交
+
+下面是对这些异常和可靠性手段的详细描述
+
+### 改进
 
 2PC因为其中心化、强一致性的特点，导致其出现问题后比较难处理，典型的问题如下但是不限于这几种情况：
 
@@ -107,6 +111,39 @@ CommitTransaction
 因为1.2/1.b、2.2/2.b引入的新问题类似：假设有3个Participator分别是A、B、C，如果在precommit完成后，Coordinator挂掉，然后Participator中A、B执行成功commit，C执行状态未知，此时集群新拉起一个Coordinator，同时Participator中的C网络故障了。对于新的Coordinator而言，它只看到了A、B成功，而无法分辨C的状态。此时无论新的Coordinator认为执行成功或失败，那一旦C重新加入集群，C的数据都有可能与其它节点不一致。
 
 > PG-XC的解决方式是通过外部二进制工具pgxc_clean，在网络故障或挂掉的节点重新加入集群时执行一次，清理可能的2PC残余，以保持集群事务的一致性。会导致的问题是，如前面的举例，如果A、B成功而C失败，新的Coordinator判断事务执行成功，而C重新加入集群后，由于事务本身的复杂性或其它原因，在清理2PC残余时，可能会选择把A、B中已经提交的事务回滚。这样对于用户来说，就会出现明明没有操作，数据却发生了变化
+
+# Percolator
+
+Percolator模型来自于Google论文，原文可见[Large-scale Incremental Processing Using Distributed Transactions and Notifications](https://www.usenix.org/legacy/event/osdi10/tech/full_papers/Peng.pdf)，网上有一些翻译版本。其中，TiDB就是采用的Percolator算法，可见其[官网介绍](https://pingcap.com/zh/blog/percolator-and-txn)
+
+Percolator是一个优化版本的2PC，分为Pre-write和Commit两个阶段。它有两个前提条件：
+
+- 存储引擎必须支持MVCC
+- tuple数据需要额外增加两列，分别是：
+  - lock：存放本次事务的锁信息
+  - write：存放tuple
+
+流程如下：
+
+## Pre-write
+
+
+
+## Commit
+
+
+
+## 总结
+
+**总结**
+
+2PC协议有3个问题，性能问题、单点故障和数据不一致。
+
+Percolator模型简化了协调节点和切片的通信流程，让协调节点只跟其中一个primary切片通信，一方面，减少了通信开销，另一方面，避免了因为单点故障，commit阶段部分节点通信失败导致的数据不一致问题。
+
+Percolator在prepare阶段记录了日志，这样即使协调节点故障了，恢复后也可以根据日志来做事务恢复。
+
+Percolator使用异步线程来做资源的释放工作，这样即使协调节点故障了，也不用担心资源得不到释放。
 
 # 3PC
 
@@ -194,3 +231,4 @@ Paxos一般分为Basic Paxos和Multi Paxos算法，Basic Paxos算法过程复杂
 2. [分布式系统理论基础 - 一致性、2PC和3PC](https://zhuanlan.zhihu.com/p/21994882)
 3. [聊聊分布式数据库对2PC的优化](https://www.51cto.com/article/640577.html)
 4. [Google Percolator](https://www.iggiewang.cn/2021/02/09/Google-Percolator/)
+5. [Large-scale Incremental Processing Using Distributed Transactions and Notifications](https://www.usenix.org/legacy/event/osdi10/tech/full_papers/Peng.pdf)
