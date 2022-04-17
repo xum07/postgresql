@@ -108,7 +108,7 @@ CommitTransaction
    1. Participator超时释放锁
    2. Participator维持原状态，直到重新加入集群。这种情况同样会引入新问题，后面讨论
 
-因为1.2/1.b、2.2/2.b引入的新问题类似：假设有3个Participator分别是A、B、C，如果在precommit完成后，Coordinator挂掉，然后Participator中A、B执行成功commit，C执行状态未知，此时集群新拉起一个Coordinator，同时Participator中的C网络故障了。对于新的Coordinator而言，它只看到了A、B成功，而无法分辨C的状态。此时无论新的Coordinator认为执行成功或失败，那一旦C重新加入集群，C的数据都有可能与其它节点不一致。
+因为1.2、2.2引入的新问题类似：假设有3个Participator分别是A、B、C，如果在precommit完成后，Coordinator挂掉，然后Participator中A、B执行成功commit，C执行状态未知，此时集群新拉起一个Coordinator，同时Participator中的C网络故障了。对于新的Coordinator而言，它只看到了A、B成功，而无法分辨C的状态。此时无论新的Coordinator认为执行成功或失败，那一旦C重新加入集群，C的数据都有可能与其它节点不一致。
 
 > PG-XC的解决方式是通过外部二进制工具pgxc_clean，在网络故障或挂掉的节点重新加入集群时执行一次，清理可能的2PC残余，以保持集群事务的一致性。会导致的问题是，如前面的举例，如果A、B成功而C失败，新的Coordinator判断事务执行成功，而C重新加入集群后，由于事务本身的复杂性或其它原因，在清理2PC残余时，可能会选择把A、B中已经提交的事务回滚。这样对于用户来说，就会出现明明没有操作，数据却发生了变化
 
@@ -183,11 +183,13 @@ Paxos因为其复杂性难以实现，业界多采用raft作为实际应用，�
 
 > 传送数据库面临的场景正好是Paxos算法可以覆盖的情况
 
-## 算法概述
-
 不过raft算法不是一个强一致性算法，其分布式数据一致性为最终一致性，在事务执行过程中，需要满足的是多数派原则：即如果大多数节点执行成功了，则认为事务执行成功。
 
-### Leader选举
+在[Raft官网](https://raft.github.io/)上，有对选举的模拟动画程序：
+
+![image-20220417170202720](protocol_of_transaction_consistency.assets/image-20220417170202720.png)
+
+## Leader选举
 
 下图是经典的raft协议中一个节点在Follower、Candidate、Leader三种状态之间的变化
 ![](protocol_of_transaction_consistency.assets/raft_leader.png)
@@ -197,7 +199,7 @@ Paxos因为其复杂性难以实现，业界多采用raft作为实际应用，�
 1. 集群中同一时刻只有一个Leader，Leader会不停给Follower发送心跳以表明自身的存活状态。如果Leader故障，那么Follower自动转换为Candidate，直到集群重新选出Leader
 2. 所有节点启动时都是Follower状态，在一段时间内如果没有收到来自Leader的心跳，从Follower切换到Candidate，发起选举；如果收到majority的造成票（含自己的一票）则切换到Leader状态；如果发现其他节点比自己更新，则主动切换到Follower
 
-### 对外工作
+## 对外工作
 
 集群在Leader正常时可以对外工作，在接收到客户端请求时，Leader把请求作为日志条目（Log entries）加入到它的日志中(每条日志有个编号，称为log index)，然后并行的向其他服务器发起 AppendEntries RPC复制日志条目。当这条日志被复制到大多数服务器上，Leader将这条日志应用到它的状态机并向客户端返回执行结果。其中，每个日志条目由两部分组成：一部分是产生该Leader时的任期编号(term)，一部分是所需执行的命令
 
@@ -205,7 +207,7 @@ Paxos因为其复杂性难以实现，业界多采用raft作为实际应用，�
 
 某些Followers可能没有成功的复制日志，Leader会无限的重试 AppendEntries RPC直到所有的Followers最终存储了所有的日志条目
 
-### 数据一致性保证
+## 数据一致性保证
 
 以上是所有节点正常的情况，如果出现日志异常，如下图：
 ![](protocol_of_transaction_consistency.assets/raft_log.png)

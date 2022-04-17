@@ -16,3 +16,9 @@
 | 内核读写信号量  | 内核态        | 获取不到信号量时会陷入睡眠                                   | down_read/up_read     down_write/up_write                    |                                                              |
 | 顺序锁          | 内核态        | 1.读写锁的优化版本     2.读写操作之间不再互斥，写的优先级高于读，即检测到正在写的时候，读操作暂停（cpu_relax）32.写操作之间依旧互斥     3.顺序锁保存有一个计数，读操作前后的计数如果不一致，那么读操作会重试 | write_seqlock     write_sequnlock     read_seqbegin     read_seqretry | 一般用于读操作很多、写操作很少的场景                         |
 | RCU锁           | 内核态        | 1.RCU（Read-Copy  Update）锁是对读写锁的一种优化     2.读不需要任何锁。在写时首先拷贝一个副本，然后对副本进行修改，最后使用一个回调在适当的时机把指向原来数据的指针重新指向新的被修改的数据。 | rcu_read_lock     rcu_read_unlock     rcu_dereference     rcu_assign_pointer | 对于读多写少的场景，机制的开销比较小，性能会大幅度提升，但是如果写操作较多时，开销将会增大，性能不一定会有所提升 |
+
+# 参考资料
+
+1. [linux内核原子操作的实现](https://blog.csdn.net/vividonly/article/details/6599502)
+2. [Linux内核29-原子操作](https://tupelo-shen.github.io/2020/04/08/Linux%E5%86%85%E6%A0%B829-%E5%8E%9F%E5%AD%90%E6%93%8D%E4%BD%9C/)
+
